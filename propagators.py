@@ -101,7 +101,32 @@ def prop_FC(csp, newVar=None):
        only one uninstantiated Variable. Remember to keep
        track of all pruned Variable,value pairs and return '''
     #IMPLEMENT
-    pass
+    # List of pruned constraint pairs
+    pruned = []
+
+    # If newVar is None, get all unary constraints in the CSP
+    if not newVar:
+        unaryConstraints = [c for c in csp.get_all_cons() if c.get_n_unasgn() == 1]
+    # Else get all unary constraints that involve newVar
+    else:
+        unaryConstraints = [c for c in csp.get_cons_with_var(newVar) if c.get_n_unasgn() == 1]
+    # Asd
+    for c in unaryConstraints:
+        unassigned = c.get_unasgn_vars()[0]
+        for val in unassigned.get_domain():
+            if not c.check_var_val(unassigned, val):
+                unassigned.prune_value(val)
+                pruned.append((unassigned, val))
+    
+    # If there are no more variables left in domain, return False
+    if unassigned.get_domain_size() == 0:
+        return False, pruned
+    
+    # Return True and the list of pruned pairs
+    return True, pruned
+
+        
+
 
 
 def prop_GAC(csp, newVar=None):
