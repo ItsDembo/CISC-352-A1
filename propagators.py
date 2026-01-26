@@ -125,13 +125,45 @@ def prop_FC(csp, newVar=None):
     # Return True and the list of pruned pairs
     return True, pruned
 
-        
-
-
 
 def prop_GAC(csp, newVar=None):
     '''Do GAC propagation. If newVar is None we do initial GAC enforce
        processing all constraints. Otherwise we do GAC enforce with
        constraints containing newVar on GAC Queue'''
     #IMPLEMENT
-    pass
+
+    # Creating the list of pruned variable-value pairs
+    pruned = []
+
+    # Building GAC Queue - if not newVar, get all constraints. Otherwise, get constraints with newVar
+    if newVar is None:
+        GACQueue = csp.get_all_cons()
+    else:
+        GACQueue = csp.get_cons_with_var(newVar)
+    
+    # Processing the GACQueue
+    while GACQueue:
+        # Popping first constraint in the GACQueue
+        c = GACQueue.pop(0)
+        # For every variable in the scope of the constraint
+        for var in c.get_scope():
+            # For every value in the domain of the variable
+            for val in list(var.get_domain()):
+                # If (val = var) is not consistent with the constraint c, then prune it
+                if not c.check_var_val(var, val):
+                    # To avoid double pruning, we check if the variable exists within the current domain
+                    if var.in_cur_domain(val):
+                        v.prune_value(val)
+                        pruned.append((var, val))
+                    
+                    # If the domain is empty then we reached a dead end, return False
+                    if var.get_domain_size() == 0:
+                        return False, pruned
+                    
+                    # Add all constraints containing var (except c) back to GACQueue
+                    for cTwo in csp.get_cons_with_var(var):
+                        if cTwo != c and cTwo not in GACQueue:
+                            GACQueue.append(cTwo)
+    
+    # If we reach the end of the while loop, return True and the list of pruned pairs
+    return True, pruned
