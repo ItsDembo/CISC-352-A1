@@ -215,9 +215,7 @@ def cagey_csp_model(cagey_grid):
         cell_vars.append(row_vars)
 
     # ---- Grid Constraints (n-ary all diff) ---
-
-    # all-different satisfying tuples (length N)
-    ad_tuples = list(permutations(range(1, N+1), N))
+    ad_tuples = list(permutations(range(1, N + 1), N))
 
     # Row constraints: All different
     for r in range(N):
@@ -236,15 +234,70 @@ def cagey_csp_model(cagey_grid):
     # ---- Cage Constraints ----
     OPS_ALL = ['+', '-', '*', '/', '%']
 
+    # Helper: generate tuples for + cages without full N^k product
+    def gen_sum_tuples(k, target_sum):
+        # values are in [1..N]
+        out = []
+
+        def backtrack(idx, curr_sum, prefix):
+            # prune: if already too big
+            if curr_sum > target_sum:
+                return
+
+            # prune: even with max values we can't reach target
+            max_possible = curr_sum + (k - idx) * N
+            if max_possible < target_sum:
+                return
+
+            if idx == k:
+                if curr_sum == target_sum:
+                    out.append(tuple(prefix))
+                return
+
+            # choose next value
+            for v in range(1, N + 1):
+                prefix.append(v)
+                backtrack(idx + 1, curr_sum + v, prefix)
+                prefix.pop()
+
+        backtrack(0, 0, [])
+        return out
+
+    # Helper: generate tuples for * cages without full N^k product
+    def gen_prod_tuples(k, target_prod):
+        out = []
+
+        def backtrack(idx, curr_prod, prefix):
+            # prune: product already too large
+            if curr_prod > target_prod:
+                return
+
+            # prune: if curr_prod does not divide target, you can never reach it
+            if target_prod % curr_prod != 0:
+                return
+
+            if idx == k:
+                if curr_prod == target_prod:
+                    out.append(tuple(prefix))
+                return
+
+            for v in range(1, N + 1):
+                prefix.append(v)
+                backtrack(idx + 1, curr_prod * v, prefix)
+                prefix.pop()
+
+        backtrack(0, 1, [])
+        return out
+
     for (target, cell_coords, op_char) in cages:
-        
+
         # Creates unique tag for naming purposes
         coord_tag = ",".join([f"{r}-{c}" for (r, c) in cell_coords])
 
         # Build list of cell Variables in this cage
         cage_cells = []
-        for(row, col) in cell_coords:
-            cage_cells.append(cell_vars[row-1][col-1])
+        for (row, col) in cell_coords:
+            cage_cells.append(cell_vars[row - 1][col - 1])
 
         # Operator variable + domain
         is_unknown = (op_char == '?' or op_char is None)
@@ -268,52 +321,61 @@ def cagey_csp_model(cagey_grid):
 
         # Generate satisfying tuples
         sat_tuples = []
-
         k = len(cage_cells)
 
-        # Iterate over operator choices
         for op in op_domain:
-            for values in product(range(1, N+1), repeat=k):
+            # 1-cell cages: only value matters
+            if k == 1:
+                for v in range(1, N + 1):
+                    if v == target:
+                        sat_tuples.append((op, v))
+                continue
 
-                ok = False
+            if op == '+':
+                for values in gen_sum_tuples(k, target):
+                    sat_tuples.append((op,) + values)
 
-                if k == 1:
-                    ok = (values[0] == target)
+            elif op == '*':
+                # If target is 0 (shouldn't be in these puzzles), this would need changes.
+                # With normal Cagey targets (positive), this is fine.
+                for values in gen_prod_tuples(k, target):
+                    sat_tuples.append((op,) + values)
 
-                elif op == '+':
-                    ok = (sum(values) == target)
+            elif op == '%':
+                # Still brute-force: modular addition doesn't prune as cleanly.
+                for values in product(range(1, N + 1), repeat=k):
+                    if (sum(values) % N) == target:
+                        sat_tuples.append((op,) + values)
 
-                elif op == '*':
-                    prod_val = 1
-                    for x in values:
-                        prod_val *= x
-                    ok = (prod_val == target)
-
-                elif op == '%':
-                    ok = ((sum(values) % N) == target)
-
-                elif op == '-': 
-                    for perm in permutations(values): 
+            elif op == '-':
+                for values in product(range(1, N + 1), repeat=k):
+                    ok = False
+                    for perm in set(permutations(values)):
                         acc = perm[0]
                         for x in perm[1:]:
                             acc = acc - x
                         if acc == target:
                             ok = True
                             break
+                    if ok:
+                        sat_tuples.append((op,) + values)
 
-                elif op == '/': 
-                    for perm in permutations(values): 
+            elif op == '/':
+                for values in product(range(1, N + 1), repeat=k):
+                    ok = False
+                    for perm in set(permutations(values)):
                         acc = perm[0]
                         valid = True
                         for x in perm[1:]:
-                            if acc % x != 0: valid = False; break
+                            if acc % x != 0:
+                                valid = False
+                                break
                             acc = acc // x
                         if valid and acc == target:
                             ok = True
                             break
-
-                if ok:
-                    sat_tuples.append((op,) + values)
+                    if ok:
+                        sat_tuples.append((op,) + values)
 
         con.add_satisfying_tuples(sat_tuples)
         csp.add_constraint(con)
