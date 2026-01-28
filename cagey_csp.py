@@ -234,17 +234,17 @@ def cagey_csp_model(cagey_grid):
     # ---- Cage Constraints ----
     OPS_ALL = ['+', '-', '*', '/', '%']
 
-    # Helper: generate tuples for + cages without full N^k product
+    # Generate tuples for + cages
     def gen_sum_tuples(k, target_sum):
         # values are in [1..N]
         out = []
 
         def backtrack(idx, curr_sum, prefix):
-            # prune: if already too big
+            # prune if already too big
             if curr_sum > target_sum:
                 return
 
-            # prune: even with max values we can't reach target
+            # prune even with max values we can't reach target
             max_possible = curr_sum + (k - idx) * N
             if max_possible < target_sum:
                 return
@@ -263,16 +263,16 @@ def cagey_csp_model(cagey_grid):
         backtrack(0, 0, [])
         return out
 
-    # Helper: generate tuples for * cages without full N^k product
+    # Generate tuples for * cages
     def gen_prod_tuples(k, target_prod):
         out = []
 
         def backtrack(idx, curr_prod, prefix):
-            # prune: product already too large
+            # prune product already too large
             if curr_prod > target_prod:
                 return
 
-            # prune: if curr_prod does not divide target, you can never reach it
+            # prune if curr_prod does not divide target you can never reach it
             if target_prod % curr_prod != 0:
                 return
 
@@ -308,8 +308,10 @@ def cagey_csp_model(cagey_grid):
         else:
             op_domain = [op_char]
 
+        cell_name_tag = ", ".join([f"Var-{v.name}" for v in cage_cells])
+
         op_var = Variable(
-            f"CageOp({target}:{op_label}:[{coord_tag}])",
+            f"Cage_op({target}:{op_label}:[{cell_name_tag}])",
             op_domain
         )
         csp.add_var(op_var)
@@ -324,7 +326,6 @@ def cagey_csp_model(cagey_grid):
         k = len(cage_cells)
 
         for op in op_domain:
-            # 1-cell cages: only value matters
             if k == 1:
                 for v in range(1, N + 1):
                     if v == target:
@@ -336,15 +337,13 @@ def cagey_csp_model(cagey_grid):
                     sat_tuples.append((op,) + values)
 
             elif op == '*':
-                # If target is 0 (shouldn't be in these puzzles), this would need changes.
-                # With normal Cagey targets (positive), this is fine.
                 for values in gen_prod_tuples(k, target):
                     sat_tuples.append((op,) + values)
 
             elif op == '%':
-                # Still brute-force: modular addition doesn't prune as cleanly.
                 for values in product(range(1, N + 1), repeat=k):
-                    if (sum(values) % N) == target:
+                    s = sum(values)
+                    if (((s - 1) % N) + 1) == target:
                         sat_tuples.append((op,) + values)
 
             elif op == '-':
