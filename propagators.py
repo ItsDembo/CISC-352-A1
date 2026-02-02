@@ -106,21 +106,32 @@ def prop_FC(csp, newVar=None):
 
     # If newVar is None, get all unary constraints in the CSP
     if not newVar:
-        unaryConstraints = [c for c in csp.get_all_cons() if c.get_n_unasgn() == 1]
+        unaryConstraints = csp.get_all_cons()
     # Else get all unary constraints that involve newVar
     else:
-        unaryConstraints = [c for c in csp.get_cons_with_var(newVar) if c.get_n_unasgn() == 1]
-    # Asd
+        unaryConstraints = csp.get_cons_with_var(newVar)
+
+    # Looping through unary constraints
     for c in unaryConstraints:
-        unassigned = c.get_unasgn_vars()[0]
-        for val in unassigned.get_domain():
-            if not c.check_var_val(unassigned, val):
-                unassigned.prune_value(val)
-                pruned.append((unassigned, val))
-    
-    # If there are no more variables left in domain, return False
-    if unassigned.get_domain_size() == 0:
-        return False, pruned
+        # Forward checking only applies to constraints
+        # with exactly one unassigned variable
+        if c.get_n_unasgn() == 1:
+
+            # Get the single unassigned variable in the constraint
+            unassigned = c.get_unasgn_vars()[0]
+
+            # Check each value in the current domain of that variable
+            for val in list(unassigned.cur_domain()):
+                # If assigning val has no supporting tuple in constraint c
+                if not c.has_support(unassigned, val):
+                    # Only prune if the value is still in the domain
+                    if unassigned.in_cur_domain(val):
+                        unassigned.prune_value(val)
+                        pruned.append((unassigned, val))
+
+            # If pruning wipes out the domain, search must fail
+            if unassigned.cur_domain_size() == 0:
+                return False, pruned
     
     # Return True and the list of pruned pairs
     return True, pruned
@@ -137,9 +148,9 @@ def prop_GAC(csp, newVar=None):
 
     # Building GAC Queue - if not newVar, get all constraints. Otherwise, get constraints with newVar
     if newVar is None:
-        GACQueue = csp.get_all_cons()
+        GACQueue = list(csp.get_all_cons())
     else:
-        GACQueue = csp.get_cons_with_var(newVar)
+        GACQueue = list(csp.get_cons_with_var(newVar))
     
     # Processing the GACQueue
     while GACQueue:
@@ -148,16 +159,16 @@ def prop_GAC(csp, newVar=None):
         # For every variable in the scope of the constraint
         for var in c.get_scope():
             # For every value in the domain of the variable
-            for val in list(var.get_domain()):
+            for val in list(var.cur_domain()):
                 # If (val = var) is not consistent with the constraint c, then prune it
-                if not c.check_var_val(var, val):
+                if not c.has_support(var, val):
                     # To avoid double pruning, we check if the variable exists within the current domain
                     if var.in_cur_domain(val):
-                        v.prune_value(val)
+                        var.prune_value(val)
                         pruned.append((var, val))
                     
                     # If the domain is empty then we reached a dead end, return False
-                    if var.get_domain_size() == 0:
+                    if var.cur_domain_size() == 0:
                         return False, pruned
                     
                     # Add all constraints containing var (except c) back to GACQueue
